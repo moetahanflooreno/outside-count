@@ -92,11 +92,50 @@ input[type=number]{
     border-radius:4px;
 }
 
+.delete-note-row{
+    display:flex;
+    gap:8px;
+    margin-top:8px;
+    align-items:stretch;
+}
+
+.note-input{
+    flex:1;
+}
+
+.note-input input{
+    width:100%;
+    padding:8px;
+    border:1px solid #ccc;
+    border-radius:4px;
+}
+
 .delete-btn{
     background:#e74c3c;
-    width:100%;
-    margin-top:8px;
     cursor: pointer;
+    padding:8px 12px;
+    border-radius:6px;
+    color:white;
+    border:none;
+}
+.inline-fields{
+    display:flex;
+    gap:8px;
+    margin-top:8px;
+}
+
+.inline-field{
+    flex:1;
+}
+
+.inline-field .label{
+    font-size:12px;
+    margin-bottom:3px;
+}
+
+.inline-field input{
+    width:100%;
+    text-align:center;
 }
 </style>
 </head>
@@ -174,12 +213,14 @@ async function loadExcel(){
                 r["Box Quantity"] || "",
 
             "TAKEN":
-                r["TAKEN"] || ""
+                r["TAKEN"] || "",
+
+            "Note":
+                r["Note"] || ""
 
         }));
 
         save();
-
         render();
 
     }
@@ -195,98 +236,90 @@ async function loadExcel(){
 }
 
 function save(){
-
     localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify(data)
     );
-
 }
 
 function render(){
 
-    const list=
-    document.getElementById("list");
+    const list=document.getElementById("list");
 
-    const search=
-    document.getElementById("searchInput")
-    .value
-    .toLowerCase()
-    .trim();
+    const search=document.getElementById("searchInput")
+    .value.toLowerCase().trim();
 
     list.innerHTML="";
 
     const filtered=data.filter(row=>{
-
         return Object.values(row)
         .join(" ")
         .toLowerCase()
         .includes(search);
-
     });
 
-    document.getElementById(
-        "rowCount"
-    ).innerText=
+    document.getElementById("rowCount").innerText=
     "Products: "+filtered.length;
 
     filtered.forEach(row=>{
 
         const index=data.indexOf(row);
 
-        const div=
-        document.createElement("div");
-
+        const div=document.createElement("div");
         div.className="card";
 
         div.innerHTML=`
 
 <div class="row">
 <div class="label">Product Name</div>
-<input
-type="text"
+<input type="text"
 value="${row["Product Name"]}"
-oninput="updateField(${index},
-'Product Name',
-this.value)">
+oninput="updateField(${index},'Product Name',this.value)">
 </div>
 
-<div class="row">
-<div class="label">Sqft</div>
-<input
-type="number"
-step="0.01"
-value="${row["Sqft"]}"
-oninput="updateField(${index},
-'Sqft',
-this.value)">
+<div class="inline-fields">
+
+    <div class="inline-field">
+        <div class="label">Sqft</div>
+        <input type="text"
+        inputmode="decimal"
+        value="${row["Sqft"]}"
+        oninput="updateField(${index},'Sqft',this.value)">
+    </div>
+
+    <div class="inline-field">
+        <div class="label">Boxes</div>
+        <input type="text"
+        inputmode="numeric"
+        value="${row["Box Quantity"]}"
+        oninput="updateField(${index},'Box Quantity',this.value)">
+    </div>
+
+    <div class="inline-field">
+        <div class="label">Taken</div>
+        <input type="text"
+        inputmode="numeric"
+        value="${row["TAKEN"]}"
+        oninput="updateField(${index},'TAKEN',this.value)">
+    </div>
+
 </div>
 
-<div class="row">
-<div class="label">Box Quantity</div>
-<input
-type="number"
-value="${row["Box Quantity"]}"
-oninput="updateField(${index},
-'Box Quantity',
-this.value)">
-</div>
+<div class="delete-note-row">
 
-<div class="row">
-<div class="label">TAKEN</div>
-<input
-type="number"
-value="${row["TAKEN"]}"
-oninput="updateField(${index},
-'TAKEN',
-this.value)">
-</div>
+    <div class="note-input">
+        <div class="label">Note</div>
+        <input type="text"
+        value="${row["Note"]}"
+        oninput="updateField(${index},'Note',this.value)">
+    </div>
 
-<button
-class="delete-btn"
-onclick="deleteRow(${index})">
-🗑 Delete
-</button>
+    <button class="delete-btn"
+    onclick="deleteRow(${index})">
+    🗑 Delete
+    </button>
+
+</div>
 
 `;
 
@@ -296,56 +329,39 @@ onclick="deleteRow(${index})">
 
 }
 
-function updateField(
-index,
-field,
-value
-){
-
+function updateField(index,field,value){
     data[index][field]=value;
-
     save();
-
 }
 
 function addRow(){
 
     data.unshift({
-
         "Product Name":"",
         "Sqft":"",
         "Box Quantity":"",
-        "TAKEN":""
-
+        "TAKEN":"",
+        "Note":""
     });
 
     save();
-
     render();
-
 }
 
 function deleteRow(index){
 
-    if(!confirm(
-        "Delete this row?"
-    )) return;
+    if(!confirm("Delete this row?")) return;
 
     data.splice(index,1);
-
     save();
-
     render();
-
 }
 
 function exportExcel(){
 
-    const worksheet=
-    XLSX.utils.json_to_sheet(data);
+    const worksheet=XLSX.utils.json_to_sheet(data);
 
-    const workbook=
-    XLSX.utils.book_new();
+    const workbook=XLSX.utils.book_new();
 
     XLSX.utils.book_append_sheet(
         workbook,
