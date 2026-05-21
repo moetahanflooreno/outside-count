@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>Outside Count</title>
+
+<style>
+*{
+    box-sizing:border-box;
+}
+
+body{
+    margin:0;
+    font-family:Arial,sans-serif;
+    background:#f4f6f8;
+}
+
+.container{
+    padding:12px;
+}
+
+h2{
+    text-align:center;
+    color:#1e1efd;
+    margin:10px 0;
+}
+
+.top-bar{
+    display:flex;
+    gap:8px;
+    margin-bottom:10px;
+}
+
+button{
+    border:none;
+    border-radius:6px;
+    padding:12px;
+    color:white;
+    font-size:14px;
+}
+
+.add-btn{
+    background:#28a745;
+    flex:1;
+    cursor: pointer;
+}
+
+.export-btn{
+    background:#1e1efd;
+    flex:1;
+    cursor: pointer;
+}
+
+.search{
+    width:100%;
+    padding:12px;
+    border:1px solid #ccc;
+    border-radius:6px;
+    margin-bottom:10px;
+    font-size:14px;
+}
+
+.count{
+    margin-bottom:10px;
+    font-weight:bold;
+}
+
+.card{
+    background:white;
+    border-radius:8px;
+    padding:10px;
+    margin-bottom:10px;
+    box-shadow:0 2px 6px rgba(0,0,0,.08);
+}
+
+.row{
+    margin-bottom:6px;
+}
+
+.label{
+    font-weight:bold;
+    color:#666;
+}
+
+input[type=text],
+input[type=number]{
+    width:100%;
+    padding:8px;
+    border:1px solid #ccc;
+    border-radius:4px;
+}
+
+.delete-btn{
+    background:#e74c3c;
+    width:100%;
+    margin-top:8px;
+    cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>Outside Count</h2>
+
+<div class="top-bar">
+    <button class="add-btn" onclick="addRow()">+ Add Row</button>
+    <button class="export-btn" onclick="exportExcel()">📤 Export</button>
+</div>
+
+<input
+    id="searchInput"
+    class="search"
+    placeholder="Search..."
+>
+
+<div class="count" id="rowCount">
+    Products: 0
+</div>
+
+<div id="list"></div>
+
+</div>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script>
+
+const STORAGE_KEY="outsideCountData";
+
+let data=[];
+
+document.getElementById("searchInput")
+.addEventListener("input",render);
+
+async function loadExcel(){
+
+    const saved=localStorage.getItem(STORAGE_KEY);
+
+    if(saved){
+        data=JSON.parse(saved);
+        render();
+        return;
+    }
+
+    try{
+
+        const response=await fetch("outside-count.xlsx");
+
+        const buffer=await response.arrayBuffer();
+
+        const workbook=XLSX.read(buffer);
+
+        const sheet=
+        workbook.Sheets[
+            workbook.SheetNames[0]
+        ];
+
+        const rows=
+        XLSX.utils.sheet_to_json(sheet);
+
+        data=rows.map(r=>({
+
+            "Product Name":
+                r["Product Name"] || "",
+
+            "Sqft":
+                r["Sqft"] || "",
+
+            "Box Quantity":
+                r["Box Quantity"] || "",
+
+            "TAKEN":
+                r["TAKEN"] || ""
+
+        }));
+
+        save();
+
+        render();
+
+    }
+    catch(err){
+
+        console.error(err);
+
+        alert(
+        "Could not load outside-count.xlsx"
+        );
+
+    }
+}
+
+function save(){
+
+    localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(data)
+    );
+
+}
+
+function render(){
+
+    const list=
+    document.getElementById("list");
+
+    const search=
+    document.getElementById("searchInput")
+    .value
+    .toLowerCase()
+    .trim();
+
+    list.innerHTML="";
+
+    const filtered=data.filter(row=>{
+
+        return Object.values(row)
+        .join(" ")
+        .toLowerCase()
+        .includes(search);
+
+    });
+
+    document.getElementById(
+        "rowCount"
+    ).innerText=
+    "Products: "+filtered.length;
+
+    filtered.forEach(row=>{
+
+        const index=data.indexOf(row);
+
+        const div=
+        document.createElement("div");
+
+        div.className="card";
+
+        div.innerHTML=`
+
+<div class="row">
+<div class="label">Product Name</div>
+<input
+type="text"
+value="${row["Product Name"]}"
+oninput="updateField(${index},
+'Product Name',
+this.value)">
+</div>
+
+<div class="row">
+<div class="label">Sqft</div>
+<input
+type="number"
+step="0.01"
+value="${row["Sqft"]}"
+oninput="updateField(${index},
+'Sqft',
+this.value)">
+</div>
+
+<div class="row">
+<div class="label">Box Quantity</div>
+<input
+type="number"
+value="${row["Box Quantity"]}"
+oninput="updateField(${index},
+'Box Quantity',
+this.value)">
+</div>
+
+<div class="row">
+<div class="label">TAKEN</div>
+<input
+type="number"
+value="${row["TAKEN"]}"
+oninput="updateField(${index},
+'TAKEN',
+this.value)">
+</div>
+
+<button
+class="delete-btn"
+onclick="deleteRow(${index})">
+🗑 Delete
+</button>
+
+`;
+
+        list.appendChild(div);
+
+    });
+
+}
+
+function updateField(
+index,
+field,
+value
+){
+
+    data[index][field]=value;
+
+    save();
+
+}
+
+function addRow(){
+
+    data.unshift({
+
+        "Product Name":"",
+        "Sqft":"",
+        "Box Quantity":"",
+        "TAKEN":""
+
+    });
+
+    save();
+
+    render();
+
+}
+
+function deleteRow(index){
+
+    if(!confirm(
+        "Delete this row?"
+    )) return;
+
+    data.splice(index,1);
+
+    save();
+
+    render();
+
+}
+
+function exportExcel(){
+
+    const worksheet=
+    XLSX.utils.json_to_sheet(data);
+
+    const workbook=
+    XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(
+        workbook,
+        worksheet,
+        "Outside Count"
+    );
+
+    XLSX.writeFile(
+        workbook,
+        "outside-count-export.xlsx"
+    );
+
+}
+
+loadExcel();
+
+</script>
+
+</body>
+</html>
