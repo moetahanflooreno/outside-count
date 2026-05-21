@@ -310,7 +310,7 @@ oninput="updateField(${index},'Product Name',this.value)">
     <div class="note-input">
         <div class="label">Note</div>
         <input type="text"
-        value="${row["Note"]}"
+        value="${row["Note"] || ""}"
         oninput="updateField(${index},'Note',this.value)">
     </div>
 
