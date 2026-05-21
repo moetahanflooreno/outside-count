@@ -314,11 +314,6 @@ oninput="updateField(${index},'Product Name',this.value)">
         oninput="updateField(${index},'Note',this.value)">
     </div>
 
-    <button class="delete-btn"
-    onclick="deleteRow(${index})">
-    🗑 Delete
-    </button>
-
 </div>
 
 `;
@@ -344,15 +339,6 @@ function addRow(){
         "Note":""
     });
 
-    save();
-    render();
-}
-
-function deleteRow(index){
-
-    if(!confirm("Delete this row?")) return;
-
-    data.splice(index,1);
     save();
     render();
 }
