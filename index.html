@@ -150,16 +150,49 @@ async function loadExcel(){
    }
  });
 
- data=Object.values(map);
+let baseData = Object.values(map);
 
- data=data.map(r=>{
-   const stored=saved[r["Product Name"]]||{};
-   return {...r,...stored};
- });
+// restore saved data (includes new rows)
+let savedData = Object.values(saved || {});
 
- save();
- populateSqftDropdown();
- render();
+// merge logic:
+// - keep saved rows (includes new rows)
+// - override with Excel base only if product exists there
+
+const finalMap = {};
+
+// first load Excel base
+baseData.forEach(r => {
+  const name = r["Product Name"];
+  if (!name) return;
+  finalMap[name] = r;
+});
+
+// then apply saved (adds new rows + overrides edits)
+savedData.forEach(r => {
+  const name = r["Product Name"];
+  if (!name) return;
+  finalMap[name] = {
+    ...finalMap[name],
+    ...r
+  };
+});
+
+const allRows = Object.values(finalMap);
+
+// detect "new rows":
+// (rows that are NOT in Excel base list)
+const baseNames = new Set(baseData.map(r => r["Product Name"]));
+
+const newRows = allRows.filter(r => !baseNames.has(r["Product Name"]));
+const existingRows = allRows.filter(r => baseNames.has(r["Product Name"]));
+
+// NEW rows on top
+data = [...newRows, ...existingRows];
+
+save();
+populateSqftDropdown();
+render();
 }
 
 function save(){
