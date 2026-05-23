@@ -21,10 +21,10 @@ button{border:none;border-radius:6px;padding:12px;color:#fff;font-size:14px;curs
 .label{font-weight:bold;color:#666}
 input[type=text]{width:100%;padding:8px;border:1px solid #ccc;border-radius:4px}
 .inline-fields{display:flex;gap:8px;margin-top:8px}
-.inline-field{flex:1}
+.inline-field{}
 .inline-field input{text-align:center}
 .note-input{margin-top:8px}
-.sqft-link{cursor:pointer;color:#1e1efd;font-weight:bold}
+.sqft-link{cursor:pointer;color:#1e1efd;font-weight:bold;margin-top:10px}
 .check-btn{background:#28a745;padding:8px}
 .clear-btn{background:#666}
 </style>
@@ -42,7 +42,38 @@ input[type=text]{width:100%;padding:8px;border:1px solid #ccc;border-radius:4px}
 <div class="filter-bar">
 <label><input type="checkbox" id="uncountedOnly"> Uncounted</label>
 <label><input type="checkbox" id="countedOnly"> Counted</label>
-<button class="clear-btn" onclick="clearSqftFilter()">Clear Sqft Filter</button>
+</div>
+<div style="
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  margin:10px 0;
+">
+
+  <select id="sqftDropdown"
+    onchange="setSqftFilter(this.value)"
+    style="
+      flex:1;
+      padding:10px;
+      border-radius:8px;
+      border:1px solid #ccc;
+      font-size:14px;
+      background:#fff;
+    ">
+    <option value="">All Sqft</option>
+  </select>
+
+  <button class="clear-btn"
+    onclick="clearSqftFilter()"
+    style="
+      padding:10px 14px;
+      border-radius:8px;
+      white-space:nowrap;
+    ">
+    Clear
+  </button>
+
 </div>
 
 <input id="searchInput" class="search" placeholder="Search...">
@@ -127,6 +158,7 @@ async function loadExcel(){
  });
 
  save();
+ populateSqftDropdown();
  render();
 }
 
@@ -136,8 +168,51 @@ function save(){
  localStorage.setItem(STORAGE_KEY,JSON.stringify(obj));
 }
 
-function setSqftFilter(v){ sqftFilter=v; render(); }
-function clearSqftFilter(){ sqftFilter=""; render(); }
+function populateSqftDropdown(){
+
+  const dropdown = document.getElementById("sqftDropdown");
+
+  const map = {};
+
+  data.forEach(r => {
+    const sqft = r["Sqft"];
+    if(!sqft) return;
+
+    if(!map[sqft]){
+      map[sqft] = { total: 0, counted: 0 };
+    }
+
+    map[sqft].total++;
+
+    if(Number(r["TAKEN"]) > 0){
+      map[sqft].counted++;
+    }
+  });
+
+  const options = Object.entries(map)
+    .sort((a,b) => Number(a[0]) - Number(b[0])) // numeric sort if possible
+    .map(([sqft, stats]) => {
+      return `<option value="${sqft}">
+        ${stats.counted}/${stats.total} - ${sqft}
+      </option>`;
+    })
+    .join("");
+
+  dropdown.innerHTML =
+    `<option value="">All Sqft</option>` + options;
+}
+
+function setSqftFilter(v){
+  sqftFilter = v;
+  document.getElementById("sqftDropdown").value = v;
+  render();
+}
+
+function clearSqftFilter(){
+  sqftFilter = "";
+  document.getElementById("sqftDropdown").value = "";
+  render();
+}
 
 // improved search (any word order)
 function matchesSearch(row, search){
@@ -231,6 +306,9 @@ function render(){
 
    list.appendChild(div);
  });
+
+  populateSqftDropdown();
+
 }
 
 function copyBoxes(i){
