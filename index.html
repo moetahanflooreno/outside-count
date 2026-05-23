@@ -3,367 +3,266 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-
 <title>Outside Count</title>
 
 <style>
-*{
-    box-sizing:border-box;
-}
-
-body{
-    margin:0;
-    font-family:Arial,sans-serif;
-    background:#f4f6f8;
-}
-
-.container{
-    padding:12px;
-}
-
-h2{
-    text-align:center;
-    color:#1e1efd;
-    margin:10px 0;
-}
-
-.top-bar{
-    display:flex;
-    gap:8px;
-    margin-bottom:10px;
-}
-
-button{
-    border:none;
-    border-radius:6px;
-    padding:12px;
-    color:white;
-    font-size:14px;
-}
-
-.add-btn{
-    background:#28a745;
-    flex:1;
-    cursor: pointer;
-}
-
-.export-btn{
-    background:#1e1efd;
-    flex:1;
-    cursor: pointer;
-}
-
-.search{
-    width:100%;
-    padding:12px;
-    border:1px solid #ccc;
-    border-radius:6px;
-    margin-bottom:10px;
-    font-size:14px;
-}
-
-.count{
-    margin-bottom:10px;
-    font-weight:bold;
-}
-
-.card{
-    background:white;
-    border-radius:8px;
-    padding:10px;
-    margin-bottom:10px;
-    box-shadow:0 2px 6px rgba(0,0,0,.08);
-}
-
-.row{
-    margin-bottom:6px;
-}
-
-.label{
-    font-weight:bold;
-    color:#666;
-}
-
-input[type=text],
-input[type=number]{
-    width:100%;
-    padding:8px;
-    border:1px solid #ccc;
-    border-radius:4px;
-}
-
-.delete-note-row{
-    display:flex;
-    gap:8px;
-    margin-top:8px;
-    align-items:stretch;
-}
-
-.note-input{
-    flex:1;
-}
-
-.note-input input{
-    width:100%;
-    padding:8px;
-    border:1px solid #ccc;
-    border-radius:4px;
-}
-
-.delete-btn{
-    background:#e74c3c;
-    cursor: pointer;
-    padding:8px 12px;
-    border-radius:6px;
-    color:white;
-    border:none;
-}
-.inline-fields{
-    display:flex;
-    gap:8px;
-    margin-top:8px;
-}
-
-.inline-field{
-    flex:1;
-}
-
-.inline-field .label{
-    font-size:12px;
-    margin-bottom:3px;
-}
-
-.inline-field input{
-    width:100%;
-    text-align:center;
-}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f4f6f8}
+.container{padding:12px}
+h2{text-align:center;color:#1e1efd}
+.top-bar,.filter-bar{display:flex;gap:8px;margin-bottom:10px;justify-content:space-between}
+button{border:none;border-radius:6px;padding:12px;color:#fff;font-size:14px;cursor:pointer}
+.add-btn{background:#28a745;flex:1}
+.export-btn{background:#1e1efd;flex:1}
+.search{width:100%;padding:12px;border:1px solid #ccc;border-radius:6px;margin-bottom:10px}
+.count{margin-bottom:10px;font-weight:bold}
+.card{background:#fff;border-radius:8px;padding:10px;margin-bottom:10px;box-shadow:0 2px 6px rgba(0,0,0,.08)}
+.card.counted{background:#e8f8e8}
+.label{font-weight:bold;color:#666}
+input[type=text]{width:100%;padding:8px;border:1px solid #ccc;border-radius:4px}
+.inline-fields{display:flex;gap:8px;margin-top:8px}
+.inline-field{flex:1}
+.inline-field input{text-align:center}
+.note-input{margin-top:8px}
+.sqft-link{cursor:pointer;color:#1e1efd;font-weight:bold}
+.check-btn{background:#28a745;padding:8px}
+.clear-btn{background:#666}
 </style>
 </head>
 
 <body>
-
 <div class="container">
-
 <h2>Outside Count</h2>
 
 <div class="top-bar">
-    <button class="add-btn" onclick="addRow()">+ Add Row</button>
-    <button class="export-btn" onclick="exportExcel()">📤 Export</button>
+<button class="add-btn" onclick="addRow()">+ Add Row</button>
+<button class="export-btn" onclick="exportExcel()">📤 Export</button>
 </div>
 
-<input
-    id="searchInput"
-    class="search"
-    placeholder="Search..."
->
-
-<div class="count" id="rowCount">
-    Products: 0
+<div class="filter-bar">
+<label><input type="checkbox" id="uncountedOnly"> Uncounted</label>
+<label><input type="checkbox" id="countedOnly"> Counted</label>
+<button class="clear-btn" onclick="clearSqftFilter()">Clear Sqft Filter</button>
 </div>
 
+<input id="searchInput" class="search" placeholder="Search...">
+<div id="activeFilter"></div>
+<div class="count" id="rowCount">Products: 0</div>
 <div id="list"></div>
-
 </div>
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
 <script>
-
 const STORAGE_KEY="outsideCountData";
-
 let data=[];
+let sqftFilter="";
 
-document.getElementById("searchInput")
-.addEventListener("input",render);
+document.getElementById("searchInput").addEventListener("input",render);
+document.getElementById("uncountedOnly").addEventListener("change",render);
+document.getElementById("countedOnly").addEventListener("change",render);
 
 async function loadExcel(){
 
-    const saved=localStorage.getItem(STORAGE_KEY);
+ let saved={};
+ try{ saved=JSON.parse(localStorage.getItem(STORAGE_KEY)||"{}"); }catch{}
 
-    if(saved){
-        data=JSON.parse(saved);
-        render();
-        return;
-    }
+ const [masterResp,v2Resp]=await Promise.allSettled([
+   fetch("outside-count.xlsx"),
+   fetch("outside-count-v2.xlsx")
+ ]);
 
-    try{
+ let masterRows=[];
+ let v2Rows=[];
 
-        const response=await fetch("outside-count.xlsx");
+ if(masterResp.status==="fulfilled"){
+   const wb=XLSX.read(await masterResp.value.arrayBuffer());
+   masterRows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+ }
 
-        const buffer=await response.arrayBuffer();
+ if(v2Resp.status==="fulfilled"){
+   const wb2=XLSX.read(await v2Resp.value.arrayBuffer());
+   v2Rows=XLSX.utils.sheet_to_json(wb2.Sheets[wb2.SheetNames[0]]);
+ }
 
-        const workbook=XLSX.read(buffer);
+ const map={};
 
-        const sheet=
-        workbook.Sheets[
-            workbook.SheetNames[0]
-        ];
+ masterRows.forEach(r=>{
+   const name=r["Product Name"]||"";
+   if(!name) return;
 
-        const rows=
-        XLSX.utils.sheet_to_json(sheet);
+   map[name]={
+     "Product Name":name,
+     "Sqft":r["Sqft"]??"",
+     "Box Quantity":r["Box Quantity"]??"",
+     "TAKEN":r["TAKEN"]??"",
+     "Note":r["Note"]??""
+   };
+ });
 
-        data=rows.map(r=>({
+ v2Rows.forEach(r=>{
+   const name=r["Product Name"]||"";
+   if(!name) return;
 
-            "Product Name":
-                r["Product Name"] || "",
+   if(!map[name]){
+     map[name]={
+       "Product Name":name,
+       "Sqft":"",
+       "Box Quantity":"",
+       "TAKEN":"",
+       "Note":""
+     };
+   }
 
-            "Sqft":
-                r["Sqft"] || "",
+   if(Number(r["TAKEN"])>0){
+     map[name]["TAKEN"]=r["TAKEN"];
+   }
+ });
 
-            "Box Quantity":
-                r["Box Quantity"] || "",
+ data=Object.values(map);
 
-            "TAKEN":
-                r["TAKEN"] || "",
+ data=data.map(r=>{
+   const stored=saved[r["Product Name"]]||{};
+   return {...r,...stored};
+ });
 
-            "Note":
-                r["Note"] || ""
-
-        }));
-
-        save();
-        render();
-
-    }
-    catch(err){
-
-        console.error(err);
-
-        alert(
-        "Could not load outside-count.xlsx"
-        );
-
-    }
+ save();
+ render();
 }
 
 function save(){
-    localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(data)
-    );
+ const obj={};
+ data.forEach(r=>obj[r["Product Name"]]=r);
+ localStorage.setItem(STORAGE_KEY,JSON.stringify(obj));
+}
+
+function setSqftFilter(v){ sqftFilter=v; render(); }
+function clearSqftFilter(){ sqftFilter=""; render(); }
+
+// improved search (any word order)
+function matchesSearch(row, search){
+ if(!search) return true;
+
+ const text=Object.values(row).join(" ").toLowerCase();
+ const words=search.toLowerCase().split(/\s+/).filter(Boolean);
+
+ return words.every(w=>text.includes(w));
 }
 
 function render(){
 
-    const list=document.getElementById("list");
+ const search=document.getElementById("searchInput").value;
+ const onlyUncounted=document.getElementById("uncountedOnly").checked;
+ const onlyCounted=document.getElementById("countedOnly").checked;
 
-    const search=document.getElementById("searchInput")
-    .value.toLowerCase().trim();
+ const list=document.getElementById("list");
+ list.innerHTML="";
 
-    list.innerHTML="";
+ document.getElementById("activeFilter").innerHTML=
+   sqftFilter?("Sqft Filter: "+sqftFilter):"";
 
-    const filtered=data.filter(row=>{
-        return Object.values(row)
-        .join(" ")
-        .toLowerCase()
-        .includes(search);
-    });
+ const filtered=data.filter(r=>{
 
-    document.getElementById("rowCount").innerText=
-    "Products: "+filtered.length;
+   const matchesSqft=!sqftFilter || String(r["Sqft"])===String(sqftFilter);
 
-    filtered.forEach(row=>{
+   const matchesCounted =
+     onlyCounted ? Number(r["TAKEN"])>0 :
+     onlyUncounted ? !(Number(r["TAKEN"])>0) :
+     true;
 
-        const index=data.indexOf(row);
+   return matchesSearch(r,search) && matchesSqft && matchesCounted;
+ });
 
-        const div=document.createElement("div");
-        div.className="card";
+ document.getElementById("rowCount").innerText="Products: "+filtered.length;
 
-        div.innerHTML=`
+ filtered.forEach(row=>{
+   const idx=data.indexOf(row);
 
-<div class="row">
-<div class="label">Product Name</div>
-<input type="text"
-value="${row["Product Name"]}"
-oninput="updateField(${index},'Product Name',this.value)">
-</div>
+   const div=document.createElement("div");
+   div.className="card"+(Number(row["TAKEN"])>0?" counted":"");
 
-<div class="inline-fields">
+   div.innerHTML=`
+   <div class="label">Product Name</div>
+   <input type="text"
+     value="${row["Product Name"]}"
+     oninput="updateField(${idx},'Product Name',this.value)"
+     onblur="render()">
 
-    <div class="inline-field">
-        <div class="label">Sqft</div>
-        <input type="text"
-        inputmode="decimal"
-        value="${row["Sqft"]}"
-        oninput="updateField(${index},'Sqft',this.value)">
-    </div>
+   <div class="inline-fields">
 
-    <div class="inline-field">
-        <div class="label">Boxes</div>
-        <input type="text"
-        inputmode="decimal"
-        value="${row["Box Quantity"]}"
-        oninput="updateField(${index},'Box Quantity',this.value)">
-    </div>
+      <div class="inline-field">
+         <div class="label">Sqft</div>
+         <div class="sqft-link" onclick="setSqftFilter('${row["Sqft"]}')">
+           ${row["Sqft"]}
+         </div>
+      </div>
 
-    <div class="inline-field">
-        <div class="label">Taken</div>
-        <input type="text"
-        inputmode="decimal"
-        value="${row["TAKEN"]}"
-        oninput="updateField(${index},'TAKEN',this.value)">
-    </div>
+      <div class="inline-field">
+         <div class="label">Boxes</div>
+         <input type="text"
+           value="${row["Box Quantity"]}"
+           oninput="updateField(${idx},'Box Quantity',this.value)"
+           onblur="render()">
+      </div>
 
-</div>
+      <div class="inline-field">
+         <div class="label">Taken</div>
+         <input type="text"
+           value="${row["TAKEN"]}"
+           oninput="updateField(${idx},'TAKEN',this.value)"
+           onblur="render()">
+      </div>
 
-<div class="delete-note-row">
+      <div class="inline-field">
+         <div class="label">&nbsp;</div>
+         <button class="check-btn" onclick="copyBoxes(${idx})">✓</button>
+      </div>
 
-    <div class="note-input">
-        <div class="label">Note</div>
-        <input type="text"
-        value="${row["Note"] || ""}"
-        oninput="updateField(${index},'Note',this.value)">
-    </div>
+   </div>
 
-</div>
+   <div class="note-input">
+      <div class="label">Note</div>
+      <input type="text"
+        value="${row["Note"]||""}"
+        oninput="updateField(${idx},'Note',this.value)"
+        onblur="render()">
+   </div>
+   `;
 
-`;
-
-        list.appendChild(div);
-
-    });
-
+   list.appendChild(div);
+ });
 }
 
-function updateField(index,field,value){
-    data[index][field]=value;
-    save();
+function copyBoxes(i){
+ data[i]["TAKEN"]=data[i]["Box Quantity"];
+ save(); render();
+}
+
+function updateField(i,f,v){
+ data[i][f]=v;
+ save();
+ // NO render here → fixes cursor + typing issue
 }
 
 function addRow(){
-
-    data.unshift({
-        "Product Name":"",
-        "Sqft":"",
-        "Box Quantity":"",
-        "TAKEN":"",
-        "Note":""
-    });
-
-    save();
-    render();
+ data.unshift({
+   "Product Name":"",
+   "Sqft":"",
+   "Box Quantity":"",
+   "TAKEN":"",
+   "Note":""
+ });
+ save(); render();
 }
 
 function exportExcel(){
-
-    const worksheet=XLSX.utils.json_to_sheet(data);
-
-    const workbook=XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(
-        workbook,
-        worksheet,
-        "Outside Count"
-    );
-
-    XLSX.writeFile(
-        workbook,
-        "outside-count-export.xlsx"
-    );
-
+ const ws=XLSX.utils.json_to_sheet(data);
+ const wb=XLSX.utils.book_new();
+ XLSX.utils.book_append_sheet(wb,ws,"Outside Count");
+ XLSX.writeFile(wb,"outside-count-export.xlsx");
 }
 
 loadExcel();
-
 </script>
 
 </body>
