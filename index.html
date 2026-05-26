@@ -2,9 +2,10 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-
+<meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
 <title>Outside Count</title>
 
 <style>
@@ -23,12 +24,19 @@ button{border:none;border-radius:6px;padding:12px;color:#fff;font-size:14px;curs
 .label{font-weight:bold;color:#666}
 input[type=text]{width:100%;padding:8px;border:1px solid #ccc;border-radius:4px}
 .inline-fields{display:flex;gap:8px;margin-top:8px}
+.inline-field{}
 .inline-field input{text-align:center}
 .note-input{margin-top:8px}
 .sqft-link{cursor:pointer;color:#1e1efd;font-weight:bold;margin-top:10px}
 .check-btn{background:#28a745;padding:8px}
-.clear-btn{background:#dc3545}
-input, textarea, select {touch-action: manipulation;}
+.clear-btn{
+  background:#dc3545;
+}
+input, textarea, select {
+  /* font-size: 12x; */
+  touch-action: manipulation;
+}
+
 </style>
 </head>
 
@@ -45,334 +53,338 @@ input, textarea, select {touch-action: manipulation;}
 <label><input type="checkbox" id="uncountedOnly"> Uncounted</label>
 <label><input type="checkbox" id="countedOnly"> Counted</label>
 </div>
+<div style="
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  margin:10px 0;
+">
 
-<div style="display:flex;gap:10px;margin:10px 0;">
-  <select id="sqftDropdown" onchange="setSqftFilter(this.value)"
-    style="flex:1;padding:10px;border-radius:8px;border:1px solid #ccc;">
+  <select id="sqftDropdown"
+    onchange="setSqftFilter(this.value)"
+    style="
+      flex:1;
+      padding:10px;
+      border-radius:8px;
+      border:1px solid #ccc;
+      font-size:14px;
+      background:#fff;
+    ">
     <option value="">All Sqft</option>
   </select>
-  <button id="clearSqftBtn" class="clear-btn" onclick="clearSqftFilter()"
-    style="padding:10px 14px;border-radius:8px;display:none;">
+
+  <button class="clear-btn"
+    onclick="clearSqftFilter()"
+    style="
+      padding:10px 14px;
+      border-radius:8px;
+      white-space:nowrap;
+    ">
+    Clear
+  </button>
+
+</div>
+
+<div style="
+  display:flex;
+  gap:10px;
+  margin-bottom:10px;
+">
+  <input
+    id="searchInput"
+    class="search"
+    placeholder="Search..."
+    style="margin-bottom:0;flex:1;"
+  >
+
+  <button
+    id="clearSearchBtn"
+    class="clear-btn"
+    onclick="clearSearch()"
+    style="display:none;"
+  >
     Clear
   </button>
 </div>
-
-<div style="display:flex;gap:10px;margin-bottom:10px;">
-  <input id="searchInput" class="search" placeholder="Search..." style="flex:1;margin:0;">
-  <button id="clearSearchBtn" class="clear-btn" onclick="clearSearch()" style="display:none;">Clear</button>
-</div>
-
 <div id="activeFilter"></div>
 <div class="count" id="rowCount">Products: 0</div>
 <div id="list"></div>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-analytics.js";
-import {
-  getFirestore,
-  doc,
-  getDoc,
-  setDoc,
-  onSnapshot
-} from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyAneXUovMh8rgTO_4TgmJ4jAwc6-Ek0d4",
-  authDomain: "outside-count.firebaseapp.com",
-  projectId: "outside-count",
-  storageBucket: "outside-count.firebasestorage.app",
-  messagingSenderId: "541111851037",
-  appId: "1:541111851037:web:897907573100d7d9d74ef4",
-  measurementId: "G-8D382T66WS"
-};
-
-const app = initializeApp(firebaseConfig);
-getAnalytics(app);
-const db = getFirestore(app);
-
-window.db = db;
-window.docRef = doc(db, "outsideCount", "main");
-window.getDoc = getDoc;
-window.setDoc = setDoc;
-window.onSnapshot = onSnapshot;
-</script>
-
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
 <script>
-let data = [];
-let sqftFilter = "";
-let listenerAttached = false;
-let saveTimer = null;       // debounce timer for Firebase saves
-let isSaving = false;       // flag: we triggered the save, ignore the echo
+const STORAGE_KEY="outsideCountData";
+let data=[];
+let sqftFilter="";
 
-document.getElementById("searchInput").addEventListener("input", () => {
-  const val = document.getElementById("searchInput").value;
-  document.getElementById("clearSearchBtn").style.display = val ? "inline-block" : "none";
+document.getElementById("searchInput").addEventListener("input",()=>{
+  updateClearButtons();
   render();
 });
+document.getElementById("uncountedOnly").addEventListener("change",render);
+document.getElementById("countedOnly").addEventListener("change",render);
 
-document.getElementById("uncountedOnly").addEventListener("change", render);
-document.getElementById("countedOnly").addEventListener("change", render);
+async function loadExcel(){
 
-async function loadExcel() {
-  const resp = await fetch("outside-count.xlsx");
-  const wb = XLSX.read(await resp.arrayBuffer());
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+ let saved = {};
+ try{
+   saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+ }catch{}
 
-  const baseData = rows.map((r, i) => ({
-    "Product Name": r["Product Name"] || "",
-    "Sqft": r["Sqft"] ?? "",
-    "Box Quantity": r["Box Quantity"] ?? "",
-    "TAKEN": r["TAKEN"] ?? "",
-    "Note": r["Note"] ?? "",
-    // Excel rows get a large negative timestamp so manually added rows always sort above them
-    "_ts": r["_ts"] ?? -(i + 1)
-  }));
+ const resp = await fetch("outside-count.xlsx");
 
-  const finalMap = {};
-  baseData.forEach(r => {
-    const name = r["Product Name"];
-    if (name) finalMap[name] = r;
-  });
+ const wb = XLSX.read(await resp.arrayBuffer());
+ const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
 
-  const snap = await getDoc(docRef);
-  const saved = snap.exists() ? snap.data().data || {} : {};
+ const baseData = rows.map(r => ({
+   "Product Name": r["Product Name"] || "",
+   "Sqft": r["Sqft"] ?? "",
+   "Box Quantity": r["Box Quantity"] ?? "",
+   "TAKEN": r["TAKEN"] ?? "",
+   "Note": r["Note"] ?? ""
+ }));
 
-  Object.values(saved).forEach(r => {
-    const name = r["Product Name"];
-    if (!name) return;
-    finalMap[name] = { ...(finalMap[name] || {}), ...r };
-  });
+ // restore saved edits + preserve added rows
+ const finalMap = {};
 
-  data = Object.values(finalMap);
+ // load Excel rows first
+ baseData.forEach(r => {
+   const name = r["Product Name"];
+   if (!name) return;
+   finalMap[name] = r;
+ });
 
-  save();
-  populateSqftDropdown();
-  render();
+ // apply saved changes and user-added rows
+ Object.values(saved).forEach(r => {
+   const name = r["Product Name"];
+   if (!name) return;
 
-  if (!listenerAttached) {
-    listenerAttached = true;
-    listenToFirebase();
-  }
+   finalMap[name] = {
+     ...finalMap[name],
+     ...r
+   };
+ });
+
+ const allRows = Object.values(finalMap);
+
+ // keep manually-added rows at top
+ const baseNames = new Set(baseData.map(r => r["Product Name"]));
+
+ const newRows = allRows.filter(
+   r => !baseNames.has(r["Product Name"])
+ );
+
+ const existingRows = allRows.filter(
+   r => baseNames.has(r["Product Name"])
+ );
+
+ data = [...newRows, ...existingRows];
+
+ save();
+ populateSqftDropdown();
+ updateClearButtons();
+ render();
 }
 
-// Debounced save: waits 800ms after last keystroke before writing to Firebase
-// This prevents onSnapshot from firing mid-typing and destroying focus
-function save() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(async () => {
-    const obj = {};
-    data.forEach(r => {
-      const name = r["Product Name"];
-      if (name) obj[name] = r;
-    });
-    try {
-      isSaving = true;
-      await setDoc(docRef, { data: obj }, { merge: true });
-    } catch (e) {
-      console.error(e);
-    } finally {
-      // Give Firebase a moment to settle before clearing the flag
-      setTimeout(() => { isSaving = false; }, 300);
-    }
-  }, 800);
+function save(){
+ const obj={};
+ data.forEach(r=>obj[r["Product Name"]]=r);
+ localStorage.setItem(STORAGE_KEY,JSON.stringify(obj));
 }
 
-function listenToFirebase() {
-  onSnapshot(docRef, snap => {
-    // If we triggered this snapshot ourselves, skip the re-render
-    // so the active input field keeps its focus and cursor position
-    if (isSaving) return;
+function populateSqftDropdown(){
 
-    const saved = snap.data()?.data || {};
-    const map = {};
-
-    data.forEach(r => {
-      const name = r["Product Name"];
-      if (name) map[name] = r;
-    });
-
-    Object.values(saved).forEach(r => {
-      const name = r["Product Name"];
-      if (!name) return;
-      map[name] = { ...(map[name] || {}), ...r };
-    });
-
-    data = Object.values(map);
-    populateSqftDropdown();
-    render();
-  });
-}
-
-function populateSqftDropdown() {
   const dropdown = document.getElementById("sqftDropdown");
+
   const map = {};
 
   data.forEach(r => {
     const sqft = r["Sqft"];
-    if (!sqft) return;
-    if (!map[sqft]) map[sqft] = { total: 0, counted: 0 };
+    if(!sqft) return;
+
+    if(!map[sqft]){
+      map[sqft] = { total: 0, counted: 0 };
+    }
+
     map[sqft].total++;
-    if (Number(r["TAKEN"]) > 0) map[sqft].counted++;
+
+    if(Number(r["TAKEN"]) > 0){
+      map[sqft].counted++;
+    }
   });
 
-  const current = sqftFilter;
+  const options = Object.entries(map)
+    .sort((a,b) => Number(a[0]) - Number(b[0]))
+    .map(([sqft, stats]) => {
+      return `<option value="${sqft}">
+        ${sqft} - (${stats.counted}/${stats.total})
+      </option>`;
+    })
+    .join("");
+
   dropdown.innerHTML =
-    `<option value="">All Sqft</option>` +
-    Object.entries(map)
-      .sort((a, b) => Number(a[0]) - Number(b[0]))
-      .map(([sqft, s]) =>
-        `<option value="${sqft}" ${current === sqft ? "selected" : ""}>${sqft} - (${s.counted}/${s.total})</option>`
-      ).join("");
+    `<option value="">All Sqft</option>` + options;
 }
 
-function setSqftFilter(v) {
+function setSqftFilter(v){
   sqftFilter = v;
-  document.getElementById("clearSqftBtn").style.display = v ? "inline-block" : "none";
+  document.getElementById("sqftDropdown").value = v;
+  updateClearButtons();
   render();
 }
-function clearSqftFilter() {
+
+function clearSqftFilter(){
   sqftFilter = "";
   document.getElementById("sqftDropdown").value = "";
-  document.getElementById("clearSqftBtn").style.display = "none";
+  updateClearButtons();
   render();
 }
 
-function clearSearch() {
+function clearSearch(){
   document.getElementById("searchInput").value = "";
-  document.getElementById("clearSearchBtn").style.display = "none";
+  updateClearButtons();
   render();
 }
 
-function matchesSearch(row, search) {
-  if (!search) return true;
-  const text = Object.values(row).join(" ").toLowerCase();
-  return search.toLowerCase().split(/\s+/).every(w => text.includes(w));
+function updateClearButtons(){
+
+  const searchFilled =
+    document.getElementById("searchInput").value.trim() !== "";
+
+  document.getElementById("clearSearchBtn").style.display =
+    searchFilled ? "block" : "none";
+
+  document.querySelector(".clear-btn").style.display =
+    sqftFilter ? "block" : "none";
 }
 
-function render() {
-  const search = document.getElementById("searchInput").value;
-  const onlyUncounted = document.getElementById("uncountedOnly").checked;
-  const onlyCounted = document.getElementById("countedOnly").checked;
+// improved search (any word order)
+function matchesSearch(row, search){
+ if(!search) return true;
 
-  const list = document.getElementById("list");
-  list.innerHTML = "";
+ const text=Object.values(row).join(" ").toLowerCase();
+ const words=search.toLowerCase().split(/\s+/).filter(Boolean);
 
-  const filtered = data.filter(r => {
-    const matchesSqft = !sqftFilter || String(r["Sqft"]) === String(sqftFilter);
-    const counted = Number(r["TAKEN"]) > 0;
-    const matchesCount =
-      onlyCounted ? counted :
-      onlyUncounted ? !counted : true;
-    return matchesSearch(r, search) && matchesSqft && matchesCount;
-  });
+ return words.every(w=>text.includes(w));
+}
 
-  // Sort: highest _ts first → manually added rows (positive ts) always above Excel rows (negative ts)
-  filtered.sort((a, b) => (b["_ts"] || 0) - (a["_ts"] || 0));
+function render(){
 
-  document.getElementById("rowCount").innerText = "Products: " + filtered.length;
+ const search=document.getElementById("searchInput").value;
+ const onlyUncounted=document.getElementById("uncountedOnly").checked;
+ const onlyCounted=document.getElementById("countedOnly").checked;
 
-  filtered.forEach(row => {
-    const idx = data.indexOf(row);
-    const div = document.createElement("div");
-    div.className = "card" + (Number(row["TAKEN"]) > 0 ? " counted" : "");
+ const list=document.getElementById("list");
+ list.innerHTML="";
 
-    div.innerHTML = `
-      <div class="label">Product Name</div>
-      <input type="text" value="${row["Product Name"]}"
-        oninput="updateField(${idx},'Product Name',this.value)">
+ document.getElementById("activeFilter").innerHTML=
+   sqftFilter?("Sqft Filter: "+sqftFilter):"";
 
-      <div class="inline-fields">
-        <div>
-          <div class="label">Sqft</div>
-          <div class="sqft-link" onclick="setSqftFilter('${row["Sqft"]}')">${row["Sqft"]}</div>
-        </div>
-        <div>
-          <div class="label">Boxes</div>
-          <input type="text" value="${row["Box Quantity"]}"
-            oninput="updateField(${idx},'Box Quantity',this.value)">
-        </div>
-        <div>
-          <div class="label">Taken</div>
-          <input type="text" value="${row["TAKEN"]}"
-            oninput="updateField(${idx},'TAKEN',this.value)">
-        </div>
-        <button class="check-btn" onclick="copyBoxes(${idx})">✓</button>
+ const filtered=data.filter(r=>{
+
+   const matchesSqft=!sqftFilter || String(r["Sqft"])===String(sqftFilter);
+
+   const matchesCounted =
+     onlyCounted ? Number(r["TAKEN"])>0 :
+     onlyUncounted ? !(Number(r["TAKEN"])>0) :
+     true;
+
+   return matchesSearch(r,search) && matchesSqft && matchesCounted;
+ });
+
+ document.getElementById("rowCount").innerText="Products: "+filtered.length;
+
+ filtered.forEach(row=>{
+   const idx=data.indexOf(row);
+
+   const div=document.createElement("div");
+   div.className="card"+(Number(row["TAKEN"])>0?" counted":"");
+
+   div.innerHTML=`
+   <div class="label">Product Name</div>
+   <input type="text"
+     value="${row["Product Name"]}"
+     oninput="updateField(${idx},'Product Name',this.value)"
+     onblur="render()">
+
+   <div class="inline-fields">
+
+      <div class="inline-field">
+         <div class="label">Sqft</div>
+         <div class="sqft-link" onclick="setSqftFilter('${row["Sqft"]}')">
+           ${row["Sqft"]}
+         </div>
       </div>
 
-      <div class="note-input">
-        <div class="label">Note</div>
-        <input type="text" value="${row["Note"] || ""}"
-          oninput="updateField(${idx},'Note',this.value)">
+      <div class="inline-field">
+         <div class="label">Boxes</div>
+         <input type="text" inputmode="decimal"
+           value="${row["Box Quantity"]}"
+           oninput="updateField(${idx},'Box Quantity',this.value)"
+           onblur="render()">
       </div>
-    `;
 
-    list.appendChild(div);
-  });
+      <div class="inline-field">
+         <div class="label">Taken</div>
+         <input type="text" inputmode="decimal"
+           value="${row["TAKEN"]}"
+           oninput="updateField(${idx},'TAKEN',this.value)"
+           onblur="render()">
+      </div>
+
+      <div class="inline-field">
+         <div class="label">&nbsp;</div>
+         <button class="check-btn" onclick="copyBoxes(${idx})">✓</button>
+      </div>
+
+   </div>
+
+   <div class="note-input">
+      <div class="label">Note</div>
+      <input type="text"
+        value="${row["Note"]||""}"
+        oninput="updateField(${idx},'Note',this.value)"
+        onblur="render()">
+   </div>
+   `;
+
+   list.appendChild(div);
+ });
 
   populateSqftDropdown();
+
 }
 
-function updateField(i, f, v) {
-  data[i][f] = v;
-  // Update card background live without re-rendering the whole list
-  if (f === "TAKEN") {
-    const cards = document.querySelectorAll("#list .card");
-    const filtered = data.filter(r => {
-      const search = document.getElementById("searchInput").value;
-      const onlyUncounted = document.getElementById("uncountedOnly").checked;
-      const onlyCounted = document.getElementById("countedOnly").checked;
-      const matchesSqft = !sqftFilter || String(r["Sqft"]) === String(sqftFilter);
-      const counted = Number(r["TAKEN"]) > 0;
-      const matchesCount = onlyCounted ? counted : onlyUncounted ? !counted : true;
-      return matchesSearch(r, search) && matchesSqft && matchesCount;
-    });
-    const cardIdx = filtered.indexOf(data[i]);
-    if (cards[cardIdx]) {
-      cards[cardIdx].className = "card" + (Number(v) > 0 ? " counted" : "");
-    }
-  }
-  save();
+function copyBoxes(i){
+ data[i]["TAKEN"]=data[i]["Box Quantity"];
+ save(); render();
 }
 
-function copyBoxes(i) {
-  data[i]["TAKEN"] = data[i]["Box Quantity"];
-  save();
-  render();
+function updateField(i,f,v){
+ data[i][f]=v;
+ save();
+ // NO render here → fixes cursor + typing issue
 }
 
-function addRow() {
-  data.unshift({
-    "Product Name": "",
-    "Sqft": "",
-    "Box Quantity": "",
-    "TAKEN": "",
-    "Note": "",
-    "_ts": Date.now()   // positive & always larger than any Excel row's negative ts
-  });
-  save();
-  render();
-  // Scroll to top so the new blank row is visible
-  window.scrollTo({ top: 0, behavior: "smooth" });
+function addRow(){
+ data.unshift({
+   "Product Name":"",
+   "Sqft":"",
+   "Box Quantity":"",
+   "TAKEN":"",
+   "Note":""
+ });
+ save(); render();
 }
 
-function exportExcel() {
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Outside Count");
-  XLSX.writeFile(wb, "outside-count-export.xlsx");
+function exportExcel(){
+ const ws=XLSX.utils.json_to_sheet(data);
+ const wb=XLSX.utils.book_new();
+ XLSX.utils.book_append_sheet(wb,ws,"Outside Count");
+ XLSX.writeFile(wb,"outside-count-export.xlsx");
 }
-
-window.addRow = addRow;
-window.exportExcel = exportExcel;
-window.updateField = updateField;
-window.copyBoxes = copyBoxes;
-window.setSqftFilter = setSqftFilter;
-window.clearSqftFilter = clearSqftFilter;
-window.clearSearch = clearSearch;
 
 loadExcel();
 </script>
